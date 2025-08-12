@@ -27,10 +27,25 @@ TARGET_FPS = 60
 VELOCITY_VECTOR_SCALE = 0.20  # arrow length = scale * |v| (tuned for readability)
 
 # Chart settings
-CHART_WIDTH = 280
-CHART_HEIGHT = 180
-CHART_HISTORY = 300  # frames to keep in history
+CHART_WIDTH = 240
+CHART_HEIGHT = 120
+CHART_HISTORY = 200  # frames to keep in history
 SHOW_CHARTS = True
+
+# Simulation area settings (leave space for charts on the right)
+SIM_WIDTH = WIDTH - CHART_WIDTH - 50  # 50px padding for charts
+SIM_HEIGHT = HEIGHT - 100  # Leave space for HUD
+SIM_X = 20  # Start position
+SIM_Y = 70  # Start below HUD
+
+# Clean UI Colors
+UI_BACKGROUND = (25, 25, 30)
+UI_BORDER = (60, 60, 70)
+UI_TEXT = (200, 200, 210)
+UI_TEXT_DIM = (140, 140, 150)
+UI_ACCENT = (70, 130, 200)
+UI_SUCCESS = (80, 180, 120)
+UI_WARNING = (220, 180, 80)
 
 # Positional correction to prevent sinking after collision resolution
 PERCENT_CORRECTION = 0.8
@@ -66,31 +81,39 @@ class Chart:
     
     def draw(self, surf: pygame.Surface, x: int, y: int, width: int, height: int, font):
         if len(self.data) < 2:
+            # Simple empty chart
+            pygame.draw.rect(surf, UI_BACKGROUND, (x, y, width, height))
+            pygame.draw.rect(surf, UI_BORDER, (x, y, width, height), 1)
+            title_text = font.render(self.title, True, UI_TEXT)
+            surf.blit(title_text, (x + 5, y + 5))
             return
         
-        # Background
-        pygame.draw.rect(surf, (30, 30, 35), (x, y, width, height))
-        pygame.draw.rect(surf, (60, 60, 70), (x, y, width, height), 2)
+        # Clean chart background
+        pygame.draw.rect(surf, UI_BACKGROUND, (x, y, width, height))
+        pygame.draw.rect(surf, UI_BORDER, (x, y, width, height), 1)
         
-        # Title
-        title_text = font.render(self.title, True, (200, 200, 210))
+        # Title and current value
+        title_text = font.render(self.title, True, UI_TEXT)
         surf.blit(title_text, (x + 5, y + 5))
         
-        # Current value
         current_val = self.data[-1] if self.data else 0
-        val_text = font.render(f"{current_val:.1f}", True, self.color)
-        surf.blit(val_text, (x + width - 60, y + 5))
+        val_text = font.render(f"{current_val:.0f}", True, self.color)
+        surf.blit(val_text, (x + width - 50, y + 5))
         
-        # Graph area
+        # Simple graph area
+        graph_x = x + 5
         graph_y = y + 25
+        graph_width = width - 10
         graph_height = height - 30
         
         # Plot data points
         points = []
         for i, value in enumerate(self.data):
-            # Normalize value to graph height
-            normalized = (value - self.min_val) / (self.max_val - self.min_val)
-            plot_x = x + (i * width) // len(self.data)
+            if self.max_val > self.min_val:
+                normalized = (value - self.min_val) / (self.max_val - self.min_val)
+            else:
+                normalized = 0.5
+            plot_x = graph_x + (i * graph_width) // max(len(self.data) - 1, 1)
             plot_y = graph_y + graph_height - (normalized * graph_height)
             points.append((plot_x, int(plot_y)))
         
@@ -141,8 +164,8 @@ class World:
         for _ in range(n):
             for _try in range(2000):
                 r = random.randint(*RADIUS_RANGE)
-                x = random.randint(WALL_MARGIN + r, self.w - WALL_MARGIN - r)
-                y = random.randint(WALL_MARGIN + r, self.h - WALL_MARGIN - r)
+                x = random.randint(SIM_X + WALL_MARGIN + r, SIM_X + self.w - WALL_MARGIN - r)
+                y = random.randint(SIM_Y + WALL_MARGIN + r, SIM_Y + self.h - WALL_MARGIN - r)
                 pos = Vec(x, y)
 
                 speed = random.uniform(*SPEED_RANGE)
@@ -175,6 +198,9 @@ class World:
 
     # ---------- physics ----------
     def step(self, dt: float):
+        # Reset collision counter for this frame
+        self.collision_count = 0
+        
         # move
         for b in self.bodies:
             b.move(dt)
@@ -182,25 +208,30 @@ class World:
         # walls
         for b in self.bodies:
             # left/right
-            if b.pos.x - b.radius < WALL_MARGIN and b.vel.x < 0:
-                b.pos.x = WALL_MARGIN + b.radius
+            if b.pos.x - b.radius < SIM_X + WALL_MARGIN and b.vel.x < 0:
+                b.pos.x = SIM_X + WALL_MARGIN + b.radius
                 b.vel.x *= -self.e
-            elif b.pos.x + b.radius > self.w - WALL_MARGIN and b.vel.x > 0:
-                b.pos.x = self.w - WALL_MARGIN - b.radius
+                self.collision_count += 1
+            elif b.pos.x + b.radius > SIM_X + self.w - WALL_MARGIN and b.vel.x > 0:
+                b.pos.x = SIM_X + self.w - WALL_MARGIN - b.radius
                 b.vel.x *= -self.e
+                self.collision_count += 1
             # top/bottom
-            if b.pos.y - b.radius < WALL_MARGIN and b.vel.y < 0:
-                b.pos.y = WALL_MARGIN + b.radius
+            if b.pos.y - b.radius < SIM_Y + WALL_MARGIN and b.vel.y < 0:
+                b.pos.y = SIM_Y + WALL_MARGIN + b.radius
                 b.vel.y *= -self.e
-            elif b.pos.y + b.radius > self.h - WALL_MARGIN and b.vel.y > 0:
-                b.pos.y = self.h - WALL_MARGIN - b.radius
+                self.collision_count += 1
+            elif b.pos.y + b.radius > SIM_Y + self.h - WALL_MARGIN and b.vel.y > 0:
+                b.pos.y = SIM_Y + self.h - WALL_MARGIN - b.radius
                 b.vel.y *= -self.e
+                self.collision_count += 1
 
         # pairwise collisions
         n = len(self.bodies)
         for i in range(n):
             for j in range(i + 1, n):
-                self.resolve_collision(self.bodies[i], self.bodies[j])
+                if self.resolve_collision(self.bodies[i], self.bodies[j]):
+                    self.collision_count += 1
 
         # trails
         for b in self.bodies:
@@ -208,8 +239,11 @@ class World:
                 b.record_trail()
             else:
                 b.trail.clear()
+        
+        # Update charts with current physics data
+        self.update_charts()
 
-    def resolve_collision(self, A: Body, B: Body):
+    def resolve_collision(self, A: Body, B: Body) -> bool:
         # Vector from A to B
         n = B.pos - A.pos
         dist = n.length()
@@ -228,28 +262,47 @@ class World:
             rv = B.vel - A.vel
             vel_along_normal = rv.dot(normal)
 
-            # If moving apart, skip impulse (but still positional correction)
-            if vel_along_normal > 0:
-                pass
-            else:
+            # Only resolve if objects are moving towards each other
+            collision_occurred = False
+            if vel_along_normal < 0:  # Moving towards each other
                 e = self.e
                 inv_mass_sum = A.inv_mass() + B.inv_mass()
-                if inv_mass_sum == 0:
-                    return
+                if inv_mass_sum > 0:
+                    # Calculate impulse magnitude with improved precision
+                    j = -(1 + e) * vel_along_normal
+                    j /= inv_mass_sum
 
-                j = -(1 + e) * vel_along_normal
-                j /= inv_mass_sum
+                    impulse = j * normal
+                    A.vel -= impulse * A.inv_mass()
+                    B.vel += impulse * B.inv_mass()
+                    collision_occurred = True
 
-                impulse = j * normal
-                A.vel -= impulse * A.inv_mass()
-                B.vel += impulse * B.inv_mass()
-
-            # Positional correction to prevent sticking
+            # Positional correction to prevent sinking (always apply if overlapping)
             penetration = min_dist - dist
-            correction_mag = max(penetration - SLOP, 0.0) * (PERCENT_CORRECTION / (A.inv_mass() + B.inv_mass()))
-            correction = correction_mag * normal
-            A.pos -= correction * A.inv_mass()
-            B.pos += correction * B.inv_mass()
+            if penetration > SLOP:
+                inv_mass_sum = A.inv_mass() + B.inv_mass()
+                if inv_mass_sum > 0:
+                    correction_mag = (penetration - SLOP) * (PERCENT_CORRECTION / inv_mass_sum)
+                    correction = correction_mag * normal
+                    A.pos -= correction * A.inv_mass()
+                    B.pos += correction * B.inv_mass()
+            
+            return collision_occurred
+        
+        return False
+
+    def update_charts(self):
+        """Update all physics charts with current data"""
+        p, ke = self.totals()
+        
+        # Calculate average speed
+        avg_speed = sum(b.vel.length() for b in self.bodies) / len(self.bodies) if self.bodies else 0
+        
+        # Update charts
+        self.charts['momentum'].add_point(p.length())
+        self.charts['kinetic_energy'].add_point(ke)
+        self.charts['speed_avg'].add_point(avg_speed)
+        self.charts['collisions'].add_point(self.collision_count)
 
     # ---------- measures ----------
     def totals(self) -> Tuple[Vec, float]:
@@ -264,21 +317,29 @@ class World:
 # ----------------------------- Drawing --------------------------------
 
 def draw_arrow(surf: pygame.Surface, start: Vec, vec: Vec, width: int = 2):
+    if vec.length_squared() < 1e-3:
+        return
+        
     end = start + vec
-    pygame.draw.line(surf, (230, 230, 230), (start.x, start.y), (end.x, end.y), width)
-    # simple head
-    if vec.length_squared() > 1e-3:
-        head = vec.normalize() * 8
+    
+    # Simple arrow line
+    pygame.draw.line(surf, (180, 180, 200), (start.x, start.y), (end.x, end.y), width)
+    
+    # Simple arrowhead
+    if vec.length() > 15:
+        head = vec.normalize() * 10
         left = Vec(-head.y, head.x) * 0.4
         right = Vec(head.y, -head.x) * 0.4
+        
         p1 = end
         p2 = end - head + left
         p3 = end - head + right
-        pygame.draw.polygon(surf, (230, 230, 230), [(p1.x, p1.y), (p2.x, p2.y), (p3.x, p3.y)])
+        
+        pygame.draw.polygon(surf, (180, 180, 200), [(p1.x, p1.y), (p2.x, p2.y), (p3.x, p3.y)])
 
 
 def main():
-    global SHOW_VECTORS, SHOW_TRAILS
+    global SHOW_VECTORS, SHOW_TRAILS, SHOW_CHARTS
 
     pygame.init()
     pygame.display.set_caption("2D Collision Sandbox (elastic/inelastic)")
@@ -286,7 +347,7 @@ def main():
     clock = pygame.time.Clock()
     font = pygame.font.SysFont("consolas", 18)
 
-    world = World(WIDTH, HEIGHT, E_COEFF)
+    world = World(SIM_WIDTH, SIM_HEIGHT, E_COEFF)
     world.random_bodies(N_BODIES)
 
     paused = False
@@ -308,6 +369,16 @@ def main():
                     SHOW_TRAILS = not SHOW_TRAILS
                 elif event.key == pygame.K_v:
                     SHOW_VECTORS = not SHOW_VECTORS
+                elif event.key == pygame.K_c:
+                    SHOW_CHARTS = not SHOW_CHARTS
+                elif event.key == pygame.K_1:
+                    world.e = 1.0  # Perfect elastic
+                elif event.key == pygame.K_2:
+                    world.e = 0.8  # Slightly inelastic
+                elif event.key == pygame.K_3:
+                    world.e = 0.5  # Moderately inelastic
+                elif event.key == pygame.K_4:
+                    world.e = 0.2  # Highly inelastic
 
         if not paused:
             world.step(dt)
@@ -315,27 +386,64 @@ def main():
         # ---- draw ----
         screen.fill(BG_COLOR)
 
+        # Simple simulation area border
+        sim_rect = (SIM_X, SIM_Y, SIM_WIDTH, SIM_HEIGHT)
+        pygame.draw.rect(screen, (30, 30, 35), sim_rect)
+        pygame.draw.rect(screen, UI_ACCENT, sim_rect, 2)
+
         # trails
         if SHOW_TRAILS:
             for b in world.bodies:
                 if len(b.trail) > 1:
                     pygame.draw.lines(screen, b.color, False, b.trail, 2)
 
-        # bodies & vectors
+        # bodies & vectors - simplified
         for b in world.bodies:
             pygame.draw.circle(screen, b.color, (int(b.pos.x), int(b.pos.y)), b.radius)
-            pygame.draw.circle(screen, (25, 25, 30), (int(b.pos.x), int(b.pos.y)), b.radius, 2)
+            pygame.draw.circle(screen, (40, 40, 45), (int(b.pos.x), int(b.pos.y)), b.radius, 2)
+            
             if SHOW_VECTORS:
                 draw_arrow(screen, b.pos, b.vel * VELOCITY_VECTOR_SCALE)
 
-        # HUD
+        # Clean, minimal HUD
+        font_main = pygame.font.SysFont("consolas", 16, bold=True)
+        font_info = pygame.font.SysFont("consolas", 12)
+        
+        # Title
+        title = font_main.render("2D Collision Physics", True, UI_TEXT)
+        screen.blit(title, (20, 15))
+        
+        # Key physics info in one clean line
         p, ke = world.totals()
-        hud = f"e={world.e:.2f} | bodies={len(world.bodies)} | Σ|p|={p.length():7.1f} | KE={ke:9.1f} | FPS={clock.get_fps():5.1f}"
-        text = font.render(hud, True, (230, 230, 235))
-        screen.blit(text, (14, 12))
+        physics_info = f"e={world.e:.2f} | Bodies={len(world.bodies)} | Momentum={p.length():.0f} | Energy={ke:.0f} | FPS={clock.get_fps():.0f}"
+        info_text = font_info.render(physics_info, True, UI_TEXT_DIM)
+        screen.blit(info_text, (20, 40))
+        
+        # Simple controls
+        controls = "[SPACE]Reset [P]Pause [T]Trails [V]Vectors [C]Charts [1-4]Elasticity [ESC]Quit"
+        control_text = font_info.render(controls, True, UI_TEXT_DIM)
+        screen.blit(control_text, (20, HEIGHT - 25))
 
-        help1 = font.render("[Space]=reset  [P]=pause  [T]=trails  [V]=vectors  [Esc/Q]=quit", True, (160, 160, 170))
-        screen.blit(help1, (14, 36))
+        # Simple charts display
+        if SHOW_CHARTS:
+            chart_font = pygame.font.SysFont("consolas", 10)
+            chart_x = SIM_X + SIM_WIDTH + 20
+            
+            # Charts title
+            title_font = pygame.font.SysFont("consolas", 12, bold=True)
+            charts_title = title_font.render("Physics Data", True, UI_TEXT)
+            screen.blit(charts_title, (chart_x, SIM_Y - 20))
+            
+            # Draw charts in a clean 2x2 grid
+            chart_list = list(world.charts.values())
+            for i, chart in enumerate(chart_list):
+                row = i // 2
+                col = i % 2
+                x = chart_x
+                y = SIM_Y + row * (CHART_HEIGHT + 20)
+                if col == 1:
+                    y += CHART_HEIGHT + 20
+                chart.draw(screen, x, y, CHART_WIDTH, CHART_HEIGHT, chart_font)
 
         pygame.display.flip()
 
