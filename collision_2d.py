@@ -7,7 +7,7 @@ from typing import List, Tuple
 
 import pygame
 
-# ----------------------------- Config ---------------------------------
+#configurations and everything
 
 WIDTH, HEIGHT = 1000, 650
 BG_COLOR = (18, 18, 22)
@@ -51,7 +51,6 @@ UI_WARNING = (220, 180, 80)
 PERCENT_CORRECTION = 0.8
 SLOP = 0.01
 
-# ----------------------------------------------------------------------
 
 Vec = pygame.math.Vector2
 
@@ -157,7 +156,7 @@ class World:
         }
         self.collision_count = 0
 
-    # ---------- initialization ----------
+    #initialization
     def random_bodies(self, n: int):
         self.bodies.clear()
         attempts = 0
@@ -196,7 +195,7 @@ class World:
         ]
         return random.choice(palette)
 
-    # ---------- physics ----------
+    # some fun physics
     def step(self, dt: float):
         # Reset collision counter for this frame
         self.collision_count = 0
