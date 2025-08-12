@@ -42,6 +42,63 @@ Vec = pygame.math.Vector2
 
 
 @dataclass
+class Chart:
+    """Simple real-time chart for physics data visualization"""
+    def __init__(self, title: str, color: Tuple[int, int, int], max_history: int = CHART_HISTORY):
+        self.title = title
+        self.color = color
+        self.data = []
+        self.max_history = max_history
+        self.min_val = 0
+        self.max_val = 1
+    
+    def add_point(self, value: float):
+        self.data.append(value)
+        if len(self.data) > self.max_history:
+            self.data.pop(0)
+        
+        # Update min/max for scaling
+        if self.data:
+            self.min_val = min(self.data)
+            self.max_val = max(self.data)
+            if self.max_val == self.min_val:  # prevent division by zero
+                self.max_val = self.min_val + 1
+    
+    def draw(self, surf: pygame.Surface, x: int, y: int, width: int, height: int, font):
+        if len(self.data) < 2:
+            return
+        
+        # Background
+        pygame.draw.rect(surf, (30, 30, 35), (x, y, width, height))
+        pygame.draw.rect(surf, (60, 60, 70), (x, y, width, height), 2)
+        
+        # Title
+        title_text = font.render(self.title, True, (200, 200, 210))
+        surf.blit(title_text, (x + 5, y + 5))
+        
+        # Current value
+        current_val = self.data[-1] if self.data else 0
+        val_text = font.render(f"{current_val:.1f}", True, self.color)
+        surf.blit(val_text, (x + width - 60, y + 5))
+        
+        # Graph area
+        graph_y = y + 25
+        graph_height = height - 30
+        
+        # Plot data points
+        points = []
+        for i, value in enumerate(self.data):
+            # Normalize value to graph height
+            normalized = (value - self.min_val) / (self.max_val - self.min_val)
+            plot_x = x + (i * width) // len(self.data)
+            plot_y = graph_y + graph_height - (normalized * graph_height)
+            points.append((plot_x, int(plot_y)))
+        
+        if len(points) > 1:
+            pygame.draw.lines(surf, self.color, False, points, 2)
+
+
+@dataclass
 class Body:
     pos: Vec
     vel: Vec
@@ -67,6 +124,15 @@ class World:
         self.w, self.h = w, h
         self.e = e
         self.bodies: List[Body] = []
+        
+        # Initialize charts
+        self.charts = {
+            'momentum': Chart("Total Momentum", (108, 163, 255)),  # blue
+            'kinetic_energy': Chart("Kinetic Energy", (235, 99, 132)),  # pink
+            'speed_avg': Chart("Avg Speed", (116, 222, 163)),  # green
+            'collisions': Chart("Collisions/Frame", (255, 187, 99))  # orange
+        }
+        self.collision_count = 0
 
     # ---------- initialization ----------
     def random_bodies(self, n: int):
